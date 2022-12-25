@@ -21,10 +21,11 @@ To start the app, you will need to run an Express server.
 ```
 # Start the Express server (http://localhost:3000)
 node app.js
-
+```
 
 ## Docker
 
 To start the app with docker, you just need to run:
 ```
 docker compose up
+```
