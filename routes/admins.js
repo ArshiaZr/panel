@@ -267,8 +267,8 @@ router.delete("/:id", utils.authMiddleware, async (req, res, next) => {
     return res.status(401).json({ msg: "Not Authorized for this action" });
   }
   Admin.findByIdAndDelete(req.params.id, async (err, deleted) => {
-    if (err) {
-      return res.status(400).json({ success: false, msg: err });
+    if (err || isEmpty(deleted)) {
+      return res.status(400).json({ success: false, msg: "Account is not found" });
     } else {
       if (deleted.email) {
         await utils.sendMail(
@@ -646,7 +646,7 @@ router.delete(
         .json({ success: false, msg: "Not Authorized for this action" });
     }
     await User.findByIdAndDelete(req.params.id, async (err, deleted) => {
-      if (err) {
+      if (err || isEmpty(deleted)) {
         return res.status(404).json({ success: false, msg: "Not found" });
       } else {
         await utils.sendMail(
