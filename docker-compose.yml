@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+  # MongoDB services
+  mongo_db:
+    container_name: db_container
+    image: mongo:latest
+    restart: always
+    ports:
+      - 2717:27017
+    volumes:
+      - mongo_db:/data/db
+
+  # Node express api
+  api:
+    build: .
+    ports:
+      - 4000:3000
+    environment:
+      NODE_ENV: development
+      DB_STRING: mongodb://mongo_db:27017/panel
+      DB_STRING_PROD: <db string>
+      db_name: my_db
+      PORT: 3000
+      SERVER_URL: http://localhost:5000/
+    depends_on:
+      - mongo_db
+
+volumes:
+  mongo_db: {}
