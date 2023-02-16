@@ -6,7 +6,7 @@ const OrderSchema = new mongoose.Schema({
     required: true,
   },
   process: {
-    // placed, approved,
+    // placed, approved, process
     type: String,
     default: "placed",
   },

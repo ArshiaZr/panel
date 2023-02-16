@@ -16,6 +16,10 @@ const {
 } = require("../validations/validations");
 const { isEmpty } = require("../validations/common");
 
+// Messages
+const { errorMessages } = require("../constants");
+const { createAddedSuccessfully } = require("../lib/utils");
+
 // Constants
 const { FINANCIAL, VERIFIED, ENABLED } = require(path.join(
   __dirname,
@@ -35,7 +39,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { filter } = req.body;
   var now = new Date();
@@ -49,7 +53,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     let revenuesResults = await Revenue.find()
       .then((revenues) => {
         if (!revenues) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, revenues, 200];
       })
@@ -65,7 +69,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     let expensesResults = await Expense.find()
       .then((expenses) => {
         if (!expenses) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, expenses, 200];
       })
@@ -105,7 +109,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     })
       .then((revenues) => {
         if (!revenues) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, revenues, 200];
       })
@@ -123,7 +127,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     })
       .then((expenses) => {
         if (!expenses) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, expenses, 200];
       })
@@ -171,7 +175,7 @@ router.get("/revenues", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { filter } = req.body;
   var now = new Date();
@@ -184,7 +188,7 @@ router.get("/revenues", utils.authMiddleware, async (req, res, next) => {
     let revenuesResults = await Revenue.find()
       .then((revenues) => {
         if (!revenues) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, revenues, 200];
       })
@@ -214,7 +218,7 @@ router.get("/revenues", utils.authMiddleware, async (req, res, next) => {
     })
       .then((revenues) => {
         if (!revenues) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, revenues, 200];
       })
@@ -253,7 +257,7 @@ router.get("/expenses", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { filter } = req.body;
   var now = new Date();
@@ -266,7 +270,7 @@ router.get("/expenses", utils.authMiddleware, async (req, res, next) => {
     let expensesResults = await Expense.find()
       .then((expenses) => {
         if (!expenses) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, expenses, 200];
       })
@@ -297,7 +301,7 @@ router.get("/expenses", utils.authMiddleware, async (req, res, next) => {
     })
       .then((expenses) => {
         if (!expenses) {
-          return [false, "Not found", 404];
+          return [false, errorMessages.notFound, 404];
         }
         return [true, expenses, 200];
       })
@@ -335,15 +339,33 @@ router.post("/revenues", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { title, cost, detail } = req.body;
-  let errors = {};
-  if (isEmpty(title)) errors = { ...errors, title: "Title is required" };
+  const validationOptions = [
+    {
+      title: "title",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("title"),
+      },
+      error: createInvalidErrorMessage("title"),
+    },
+    {
+      title: "detail",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("detail"),
+      },
+      error: createInvalidErrorMessage("detail"),
+    },
+  ];
   if (validateCurrency(cost, "amount") !== null)
     errors = { ...errors, ...validateCurrency(cost, "amount") };
-  if (isEmpty(detail)) errors = { ...errors, detail: "Detail is required" };
-  if (!isEmpty(errors)) {
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   const newRevenue = new Revenue({
@@ -356,7 +378,7 @@ router.post("/revenues", utils.authMiddleware, async (req, res, next) => {
     .then((ret) => {
       return res
         .status(200)
-        .json({ success: true, msg: "revenue added sucessfully" });
+        .json({ success: true, msg: createAddedSuccessfully("revenue") });
     })
     .catch((err) => {
       return res.status(400).json({ success: false, err });
@@ -375,15 +397,33 @@ router.post("/expenses", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { title, cost, detail } = req.body;
-  let errors = {};
-  if (isEmpty(title)) errors = { ...errors, title: "Title is required" };
-  if (validateCurrency(cost, "cost") !== null)
-    errors = { ...errors, ...validateCurrency(cost, "cost") };
-  if (isEmpty(detail)) errors = { ...errors, detail: "Detail is required" };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "title",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("title"),
+      },
+      error: createInvalidErrorMessage("title"),
+    },
+    {
+      title: "detail",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("detail"),
+      },
+      error: createInvalidErrorMessage("detail"),
+    },
+  ];
+  if (validateCurrency(cost, "amount") !== null)
+    errors = { ...errors, ...validateCurrency(cost, "amount") };
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   const newExpense = new Expense({
@@ -396,7 +436,7 @@ router.post("/expenses", utils.authMiddleware, async (req, res, next) => {
     .then((ret) => {
       return res
         .status(200)
-        .json({ success: true, msg: "expense added sucessfully" });
+        .json({ success: true, msg: createAddedSuccessfully("expense") });
     })
     .catch((err) => {
       return res.status(400).json({ success: false, err });

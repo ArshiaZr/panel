@@ -10,7 +10,11 @@ require("dotenv").config();
 
 var app = express();
 
+//import database
 require(path.join(__dirname, "./config/database"));
+
+//Import email Handler
+require(path.join(__dirname, "./config/email"));
 
 // Load the models
 require(path.join(__dirname, "./models/user"));

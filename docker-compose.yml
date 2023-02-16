@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   # MongoDB services
@@ -15,14 +15,17 @@ services:
   api:
     build: .
     ports:
-      - 4000:3000
+      - 80:3000
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DB_STRING: mongodb://mongo_db:27017/panel
-      DB_STRING_PROD: <db string>
+      DB_STRING_PROD: mongodb://mongo_db:27017/panel
       db_name: my_db
       PORT: 3000
       SERVER_URL: http://localhost:5000/
+      EMAIL_SERVICE: hotmail
+      EMAIL_USERNAME: contact@vima.team
+      EMAIL_PASSWORD: 2022Vim@a
     depends_on:
       - mongo_db
 

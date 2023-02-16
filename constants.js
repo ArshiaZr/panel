@@ -18,6 +18,26 @@ const upload = multer({
   limits: 4 * 1000 * 1000,
 });
 
+const errorMessages = {
+  authFailed: "Authentication has been failed",
+  wrongUserPass: "Wrong username/password",
+  accessDenied: "You don't have the right permission to accesss this route",
+  accountExists: "The account is already exists",
+  accountDoesNotExist: "No account found",
+  accountAlreadyComplete:
+    "The account information is already filled. If you need to change any information, you have to contact the administrator",
+  verificationNotMatch: "There is no account match with this verification code",
+  accountAlreadyVerified: "The account is already verified",
+  other: "Something went wrong contact the administrator",
+  notFound: "Not found",
+};
+
+const successMessages = {
+  accountCompleted:
+    "Your account is complete now. We just sent you an email with verification url",
+  verifiedSuccessfully: "Your account verified successfully",
+};
+
 module.exports.hierarchy = {
   administrator: [
     FINANCIAL,
@@ -50,6 +70,7 @@ module.exports.hierarchy = {
 module.exports.employerEmployee = {
   administrator: ["owner", "headdepartment", "support", "employees"],
   owner: ["headdepartment", "support"],
+  headdepartment: [],
   support: [],
   employees: [],
 };
@@ -68,3 +89,5 @@ module.exports.DEL_ADMIN = DEL_ADMIN;
 module.exports.CHNG_ROLE = CHNG_ROLE;
 module.exports.ENBL_ADMIN = ENBL_ADMIN;
 module.exports.DEL_EMP = DEL_EMP;
+module.exports.errorMessages = errorMessages;
+module.exports.successMessages = successMessages;

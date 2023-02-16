@@ -4,4 +4,4 @@ COPY package*.json .
 RUN npm ci
 COPY . .
 RUN npm run pair
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

@@ -20,6 +20,10 @@ const {
 } = require("../validations/validations");
 const { isEmpty } = require("../validations/common");
 
+// Messages
+const { errorMessages } = require("../constants");
+const { createInvalidErrorMessage } = require("../lib/utils");
+
 // Constants
 const { STORE, VERIFIED, ENABLED } = require(path.join(
   __dirname,
@@ -39,7 +43,7 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { filter } = req.body;
   var now = new Date();
@@ -51,7 +55,9 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     Order.find()
       .then((orders) => {
         if (!orders) {
-          return res.status(404).json({ success: false, msg: "Not found" });
+          return res
+            .status(404)
+            .json({ success: false, msg: errorMessages.notFound });
         }
         return res.status(200).json({ success: true, orders });
       })
@@ -67,7 +73,9 @@ router.get("/", utils.authMiddleware, async (req, res, next) => {
     })
       .then((orders) => {
         if (!orders) {
-          return res.status(404).json({ success: false, msg: "Not found" });
+          return res
+            .status(404)
+            .json({ success: false, msg: errorMessages.notFound });
         }
         return res.status(200).json({ success: true, orders });
       })
@@ -90,7 +98,7 @@ router.get("/:id", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { filter } = req.body;
   var now = new Date();
@@ -102,7 +110,9 @@ router.get("/:id", utils.authMiddleware, async (req, res, next) => {
     Order.find({ customer: req.params.id })
       .then((order) => {
         if (!order) {
-          return res.status(404).json({ success: false, msg: "Not found" });
+          return res
+            .status(404)
+            .json({ success: false, msg: errorMessages.notFound });
         }
         return res.status(200).json({ success: true, order });
       })
@@ -119,7 +129,9 @@ router.get("/:id", utils.authMiddleware, async (req, res, next) => {
     })
       .then((order) => {
         if (!order) {
-          return res.status(404).json({ success: false, msg: "Not found" });
+          return res
+            .status(404)
+            .json({ success: false, msg: errorMessages.notFound });
         }
         return res.status(200).json({ success: true, order });
       })
@@ -133,8 +145,6 @@ router.get("/:id", utils.authMiddleware, async (req, res, next) => {
 // accesibility admins with permition and users
 router.post("/place", utils.authMiddleware, async (req, res, next) => {
   let userEmail = null;
-  let { customer, detail } = req.body;
-  let errors = {};
 
   if (req.jwt.role) {
     if (
@@ -145,24 +155,20 @@ router.post("/place", utils.authMiddleware, async (req, res, next) => {
     ) {
       return res
         .status(401)
-        .json({ success: false, msg: "Not Authorized for this action" });
+        .json({ success: false, msg: errorMessages.accessDenied });
     }
   } else {
     customer = req.jwt.sub;
     let isVerifiedAndEnabled = await User.findById(req.jwt.sub)
       .then((user) => {
         if (!user) {
-          return [false, "Not found"];
+          return [false, errorMessages.notFound];
         }
         if (!user.verified) {
-          return [false, "You have to first verify your account"];
+          return [false, errorMessages.accessDenied];
         }
         if (!user.enabled) {
-          return [
-            false,
-            "Your account is disabled. Please contact support team",
-            user.email,
-          ];
+          return [false, errorMessages.accessDenied, user.email];
         }
         return [true, ""];
       })
@@ -178,12 +184,34 @@ router.post("/place", utils.authMiddleware, async (req, res, next) => {
       userEmail = isVerifiedAndEnabled[2];
     }
   }
-  if (textLength(detail, 6, 800, "detail") !== null)
-    errors = { ...errors, ...textLength(detail, 6, 800, "detail") };
-  if (isEmpty(customer)) {
-    return res
-      .status(400)
-      .json({ success: false, customer: "You should specify the customer" });
+  let { customer, detail } = req.body;
+
+  const validationOptions = [
+    {
+      title: "detail",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("detail"),
+      },
+      length: {
+        value: [6, 800],
+        error: createLengthErrorMessage("detail", 6, 800),
+      },
+      error: createInvalidErrorMessage("detail"),
+    },
+    {
+      title: "customer",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("customer"),
+      },
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
+    return res.status(400).json({ success: false, errors });
   }
   if (
     !(await User.exists({ _id: customer }, (err) => {
@@ -191,9 +219,10 @@ router.post("/place", utils.authMiddleware, async (req, res, next) => {
       return true;
     }))
   ) {
-    return res
-      .status(400)
-      .json({ success: false, customer: "Customer id is not valid" });
+    return res.status(400).json({
+      success: false,
+      customer: createInvalidErrorMessage("customer id"),
+    });
   }
 
   if (!isEmpty(errors)) {
@@ -215,7 +244,7 @@ router.post("/place", utils.authMiddleware, async (req, res, next) => {
           orderPlaced(newOrder)
         );
       }
-      return res.status(200).json({ success: true, msg: "Order placed" });
+      return res.status(200).json({ success: true, msg: newOrder });
     })
     .catch((err) => {
       return res.status(400).json({ success: false, err });
@@ -234,28 +263,61 @@ router.post("/:id", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   let { process, detail, comment, value } = req.body;
-  let errors = {};
-  if (isValidOption(process, ["placed", "approved"], "process") !== null)
-    errors = {
-      ...errors,
-      ...isValidOption(process, ["placed", "approved"], "process"),
-    };
-  if (textLength(detail, 3, 800, "detail") !== null)
-    errors = { ...errors, ...textLength(detail, 3, 800, "detail") };
-  if (textLength(comment, 3, 800, "comment") !== null)
-    errors = { ...errors, ...textLength(comment, 3, 800, "comment") };
+  const validationOptions = [
+    {
+      title: "detail",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("detail"),
+      },
+      length: {
+        value: [3, 800],
+        error: createLengthErrorMessage("detail", 3, 800),
+      },
+      error: createInvalidErrorMessage("detail"),
+    },
+    {
+      title: "comment",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("comment"),
+      },
+      length: {
+        value: [3, 800],
+        error: createLengthErrorMessage("comment", 3, 800),
+      },
+      error: createInvalidErrorMessage("comment"),
+    },
+    {
+      title: "process",
+      type: "options",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("process"),
+      },
+      validOptions: {
+        value: ["placed", "approved"],
+      },
+      error: createInvalidErrorMessage("process"),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
   if (validateCurrency(value, "value") !== null)
     errors = { ...errors, ...validateCurrency(value, "value") };
-  if (!isEmpty(errors)) {
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   Order.findById(req.params.id)
     .then(async (order) => {
       if (!order) {
-        return res.status(404).json({ success: false, msg: "Not found" });
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.notFound });
       }
       let dateModified = Date.now();
       order.process = process;
@@ -271,9 +333,7 @@ router.post("/:id", utils.authMiddleware, async (req, res, next) => {
             "Your order detail has changed",
             orderDetailChanged(order)
           );
-          return res
-            .status(200)
-            .json({ success: true, msg: "Order modified successfully" });
+          return res.status(200).json({ success: true, msg: order });
         })
         .catch((err) => {
           return res.status(400).json({ success: false, err });

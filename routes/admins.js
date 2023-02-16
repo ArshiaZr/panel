@@ -11,6 +11,13 @@ const User = mongoose.model("User");
 // helper functions
 const utils = require(path.join(__dirname, "../lib/utils"));
 
+// Error messages
+const {
+  createRequirementErrorMessage,
+  createInvalidErrorMessage,
+  createLengthErrorMessage,
+} = require("../lib/utils");
+
 // Constants
 const {
   hierarchy,
@@ -24,6 +31,8 @@ const {
   DEL_ADMIN,
   VERIFIED,
   ENABLED,
+  errorMessages,
+  successMessages,
 } = require(path.join(__dirname, "../constants"));
 
 // Verification Templates
@@ -42,6 +51,12 @@ const PRIV_KEY = fs.readFileSync(pathToKey, "utf8");
 const PUB_KEY = fs.readFileSync(pathToPubKey, "utf8");
 
 // Validations
+const { validateRequests } = require(path.join(
+  __dirname,
+  "../components/validation"
+));
+
+// Validations
 const {
   textLength,
   validatePassword,
@@ -56,12 +71,28 @@ const { upload } = require(path.join(__dirname, "../constants"));
 
 // Validate an existing user and issue a JWT
 router.post("/login", async (req, res, next) => {
-  let errors = {};
-  if (isEmpty(req.body.username))
-    errors = { ...errors, username: "Username is required" };
-  if (isEmpty(req.body.password))
-    errors = { ...errors, password: "Password is required" };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "username",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("username"),
+      },
+      error: createInvalidErrorMessage("username"),
+    },
+    {
+      title: "password",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("password"),
+      },
+      error: createInvalidErrorMessage("password"),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   Admin.findOne({ username: req.body.username.toString().toLowerCase() })
@@ -69,7 +100,7 @@ router.post("/login", async (req, res, next) => {
       if (!admin) {
         return res
           .status(401)
-          .json({ success: false, msg: "Authentication failed" });
+          .json({ success: false, msg: errorMessages.authFailed });
       }
 
       const isValid = utils.validPassword(
@@ -89,7 +120,7 @@ router.post("/login", async (req, res, next) => {
       } else {
         res
           .status(401)
-          .json({ success: false, msg: "Wrong username/password" });
+          .json({ success: false, msg: errorMessages.wrongUserPass });
       }
     })
     .catch((err) => {
@@ -99,19 +130,43 @@ router.post("/login", async (req, res, next) => {
 
 // Register administrator
 router.post("/register-admin", async (req, res, next) => {
-  let errors = {};
-  if (textLength(req.body.username, 3, 20, "username") !== null)
-    errors = { ...errors, ...textLength(req.body.username, 3, 20, "username") };
-  if (validatePassword(req.body.password) !== null)
-    errors = { ...errors, ...validatePassword(req.body.password) };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "username",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("username"),
+      },
+      length: {
+        value: [3, 20],
+        error: createLengthErrorMessage("username", 3, 20),
+      },
+      error: createInvalidErrorMessage("username"),
+    },
+    {
+      title: "password",
+      type: "password",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("password"),
+      },
+      length: {
+        value: [8, 30],
+      },
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
+
   Admin.findOne().then((admin) => {
     if (!isEmpty(admin)) {
-      return res
-        .status(401)
-        .json({ success: false, msg: "You are not authorized to visit this route" });
+      return res.status(401).json({
+        success: false,
+        msg: errorMessages.accessDenied,
+      });
     }
 
     const saltHash = utils.genPassword(req.body.password);
@@ -147,32 +202,66 @@ router.post("/register", utils.authMiddleware, async (req, res, next) => {
       VERIFIED,
     ]))
   ) {
-    return res.status(401).json({ success:false,  msg: "Not Authorized for this action" });
+    return res
+      .status(401)
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
-  let errors = {};
-  if (textLength(req.body.username, 3, 20, "username") !== null)
-    errors = { ...errors, ...textLength(req.body.username, 3, 20, "username") };
-  if (validatePassword(req.body.password) !== null)
-    errors = { ...errors, ...validatePassword(req.body.password) };
-  if (isValidOption(req.body.role, Object.keys(hierarchy)) !== null)
-    errors = {
-      ...errors,
-      ...isValidOption(req.body.role, Object.keys(hierarchy), "role"),
-    };
-  if (!isEmpty(errors)) {
+
+  const validationOptions = [
+    {
+      title: "username",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("username"),
+      },
+      length: {
+        value: [3, 20],
+        error: createLengthErrorMessage("username", 3, 20),
+      },
+      error: createInvalidErrorMessage("username"),
+    },
+    {
+      title: "password",
+      type: "password",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("password"),
+      },
+      length: {
+        value: [8, 30],
+      },
+    },
+    {
+      title: "role",
+      type: "options",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("role"),
+      },
+      validOptions: {
+        value: Object.keys(hierarchy),
+      },
+      error: createInvalidErrorMessage("role"),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   req.body.username = req.body.username.toLowerCase();
   req.body.role = req.body.role.toLowerCase();
 
-  if(req.body.role == "administrator"){
-    return res.status(401).json({ success:false,  msg: "Not Authorized for this action" });
+  if (req.body.role == "administrator") {
+    return res
+      .status(401)
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   Admin.findOne({ username: req.body.username }).then((admin) => {
     if (admin) {
       return res
         .status(409)
-        .json({ success: false, msg: "The username already registered" });
+        .json({ success: false, msg: errorMessages.accountExists });
     }
     const saltHash = utils.genPassword(req.body.password);
 
@@ -201,7 +290,6 @@ router.post(
   "/change-role/:id",
   utils.authMiddleware,
   async (req, res, next) => {
-    let errors = {};
     if (
       !req.jwt.role ||
       !(await utils.checkCredibility(req.jwt.sub, req.jwt.role, CHNG_ROLE, [
@@ -209,40 +297,48 @@ router.post(
         VERIFIED,
       ]))
     ) {
-      return res.status(401).json({ success: false, msg: "Not Authorized for this action" });
+      return res
+        .status(401)
+        .json({ success: false, msg: errorMessages.accessDenied });
     }
     let role = req.body.role;
-    if (isValidOption(role, Object.keys(hierarchy), "role") !== null)
-      errors = {
-        ...errors,
-        ...isValidOption(role, Object.keys(hierarchy), "role"),
-      };
-
-    if (!isEmpty(errors)) {
+    const validationOptions = [
+      {
+        title: "role",
+        type: "options",
+        required: {
+          value: true,
+          error: createRequirementErrorMessage("role"),
+        },
+        validOptions: {
+          value: Object.keys(hierarchy),
+        },
+        error: createInvalidErrorMessage("role"),
+      },
+    ];
+    let { isValid, errors } = validateRequests(req.body, validationOptions);
+    if (!isValid) {
       return res.status(400).json({ success: false, errors });
     }
     role = role.toLowerCase();
     Admin.findById(req.params.id)
       .then(async (admin) => {
+        // TODO: define the job
         if (role === "administrator") {
           return res
             .status(401)
-            .json({ success: false, msg: "Not Authorized for this action" });
+            .json({ success: false, msg: errorMessages.accessDenied });
         }
-        if (Object.keys(hierarchy).includes(role)) {
-          admin.role = role;
-        } else {
-          return res.status(400).json({ success: false,  msg: "Wrong input" });
-        }
-
         admin
           .save()
           .then(async (ret) => {
-            await utils.sendMail(
-              admin.email,
-              "Your role has changed",
-              adminRoleChange(admin)
-            );
+            if (admin.email) {
+              await utils.sendMail(
+                admin.email,
+                "Your role has changed",
+                adminRoleChange(admin)
+              );
+            }
             return res.status(200).json({ success: true, admin: ret });
           })
           .catch((err) => {
@@ -264,11 +360,13 @@ router.delete("/:id", utils.authMiddleware, async (req, res, next) => {
       VERIFIED,
     ]))
   ) {
-    return res.status(401).json({ msg: "Not Authorized for this action" });
+    return res.status(401).json({ msg: errorMessages.accessDenied });
   }
   Admin.findByIdAndDelete(req.params.id, async (err, deleted) => {
     if (err || isEmpty(deleted)) {
-      return res.status(400).json({ success: false, msg: "Account is not found" });
+      return res
+        .status(400)
+        .json({ success: false, msg: errorMessages.accountDoesNotExist });
     } else {
       if (deleted.email) {
         await utils.sendMail(
@@ -297,12 +395,12 @@ router.patch("/:id", utils.authMiddleware, async (req, res, next) => {
       VERIFIED,
     ]))
   ) {
-    return res.status(401).json({ msg: "Not Authorized for this action" });
+    return res.status(401).json({ msg: errorMessages.accessDenied });
   }
   Admin.findById(req.params.id)
     .then((admin) => {
       if (!admin) {
-        return res.status(404).json({ msg: "The user not found" });
+        return res.status(404).json({ msg: errorMessages.accountDoesNotExist });
       }
       admin.enabled = !admin.enabled;
       admin
@@ -315,28 +413,63 @@ router.patch("/:id", utils.authMiddleware, async (req, res, next) => {
         });
     })
     .catch((err) => {
-      return res.status(400).json({ success: false, msg: "" });
+      return res
+        .status(400)
+        .json({ success: false, msg: errorMessages.accountDoesNotExist });
     });
 });
 
 // complete admin account
 router.post(
-  "/compelete",
+  "/complete",
   utils.authMiddleware,
   upload.single("file"),
   async (req, res, next) => {
     const { firstname, lastname, phonenumber, email } = req.body;
-    let errors = {};
-    if (textLength(firstname, 3, 20, "firstname") !== null)
-      errors = { ...errors, ...textLength(firstname, 3, 20, "firstname") };
-    if (textLength(lastname, 3, 20, "lastname") !== null)
-      errors = { ...errors, ...textLength(lastname, 3, 20, "lastname") };
-    if (validatePhonenumber(phonenumber) !== null)
-      errors = { ...errors, ...validatePhonenumber(phonenumber) };
-    if (validateEmail(email) !== null)
-      errors = { ...errors, ...validateEmail(email) };
+    const validationOptions = [
+      {
+        title: "firstname",
+        type: "text",
+        required: {
+          value: true,
+          error: createRequirementErrorMessage("firstname"),
+        },
+        error: createInvalidErrorMessage("firstname"),
+      },
+      {
+        title: "lastname",
+        type: "text",
+        required: {
+          value: true,
+          error: createRequirementErrorMessage("lastname"),
+        },
+        error: createInvalidErrorMessage("firstname"),
+      },
+      {
+        title: "phonenumber",
+        type: "phonenumber",
+        required: {
+          value: true,
+          error: createRequirementErrorMessage("phonenumber"),
+        },
+        error: createInvalidErrorMessage("phonenumber"),
+      },
+      {
+        title: "email",
+        type: "email",
+        required: {
+          value: true,
+          error: createRequirementErrorMessage("email"),
+        },
+        error: createInvalidErrorMessage("email"),
+      },
+    ];
+    let { isValid, errors } = validateRequests(req.body, validationOptions);
     if (!req.file) {
-      errors = { ...errors, image: "image is required" };
+      errors = { ...errors, image: createRequirementErrorMessage("image") };
+    }
+    if (!isValid) {
+      return res.status(400).json({ success: false, errors });
     }
     if (!isEmpty(errors)) {
       if (req.file) {
@@ -355,7 +488,7 @@ router.post(
         }
         return res
           .status(404)
-          .json({ success: false, msg: "The user not found" });
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       }
       if (admin.verified) {
         if (req.file) {
@@ -365,7 +498,7 @@ router.post(
         }
         return res.status(409).json({
           success: false,
-          msg: "The account information is already filled. If you need to change any information, you have to contact the administrator.",
+          msg: errorMessages.accountAlreadyComplete,
         });
       }
       admin.firstname = firstname.toLowerCase();
@@ -386,16 +519,20 @@ router.post(
               algorithm: "RS256",
             }
           );
-          await utils.sendMail(
+          EmailHandler.sendEmail(
+            "Admin",
             admin.email,
             "Verify your account",
+            "Verification",
             adminVerificationLink(admin, signedToken)
           );
           req.objectToPass = {
             success: true,
-            msg: "Your account is complete now. We just sent you an email with verification url.",
+            msg: successMessages.accountCompleted,
           };
+
           req.filename = admin.image;
+
           return next();
         })
         .catch((err) => {
@@ -434,13 +571,13 @@ router.get("/activate/:token", async (req, res, next) => {
           if (!admin) {
             return res.status(404).json({
               success: false,
-              msg: "There is no account match with this verification code",
+              msg: errorMessages.verificationNotMatch,
             });
           }
           if (admin.verified) {
             return res.status(400).json({
               success: false,
-              msg: "The account is already verified",
+              msg: errorMessages.accountAlreadyVerified,
             });
           }
 
@@ -453,7 +590,7 @@ router.get("/activate/:token", async (req, res, next) => {
             );
             return res.status(200).json({
               success: true,
-              msg: "Your account verified successfully",
+              msg: successMessages.verifiedSuccessfully,
             });
           });
         })
@@ -461,14 +598,10 @@ router.get("/activate/:token", async (req, res, next) => {
           return res.status(400).json({ success: false, msg: err });
         });
     } else {
-      return res
-        .status(400)
-        .json({ success: false, msg: "something went wrong" });
+      return res.status(400).json({ success: false, msg: errorMessages.other });
     }
   } else {
-    return res
-      .status(400)
-      .json({ success: false, msg: "something went wrong" });
+    return res.status(400).json({ success: false, msg: errorMessages.other });
   }
 });
 
@@ -481,14 +614,23 @@ router.get("/employees", utils.authMiddleware, async (req, res, next) => {
       VERIFIED,
     ]))
   ) {
-    return res.status(401).json({ success:false, msg: "Not Authorized for this action" });
+    return res
+      .status(401)
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
-  
-  if(!Object.keys(employerEmployee).includes(req.jwt.role)){
-    return res.status(400).json({ success: false, msg: "The role does not defined" });
+
+  if (!Object.keys(employerEmployee).includes(req.jwt.role)) {
+    return res
+      .status(400)
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   Admin.find({ role: { $in: employerEmployee[req.jwt.role] } })
     .then((admins) => {
+      if (isEmpty(admins)) {
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
+      }
       admins = admins.map((admin) => {
         return {
           id: admin._id,
@@ -496,7 +638,7 @@ router.get("/employees", utils.authMiddleware, async (req, res, next) => {
           username: admin.username,
           firstname: admin.firstname,
           lastname: admin.lastname,
-          role: admin.role
+          role: admin.role,
         };
       });
       return res.status(200).json(admins);
@@ -520,15 +662,20 @@ router.delete(
     ) {
       return res
         .status(401)
-        .json({ success: false, msg: "Not Authorized for this action" });
+        .json({ success: false, msg: errorMessages.accessDenied });
     }
     await Admin.findById(req.params.id)
       .then(async (admin) => {
         if (!admin) {
-          return res.status(404).json({ success: false, msg: "Not found" });
+          return res
+            .status(404)
+            .json({ success: false, msg: errorMessages.accountDoesNotExist });
         }
-        
-        if (Object.keys(employerEmployee).includes(req.jwt.role) && employerEmployee[req.jwt.role].includes(admin.role)) {
+
+        if (
+          Object.keys(employerEmployee).includes(req.jwt.role) &&
+          employerEmployee[req.jwt.role].includes(admin.role)
+        ) {
           await admin.delete().then(async (ret) => {
             await utils.sendMail(
               admin.email,
@@ -546,7 +693,7 @@ router.delete(
         } else {
           return res
             .status(401)
-            .json({ success: false, msg: "Not Authorized for this action" });
+            .json({ success: false, msg: errorMessages.accessDenied });
         }
       })
       .catch((err) => {
@@ -568,12 +715,14 @@ router.get("/customers", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   User.find()
     .then((users) => {
-      if (!users) {
-        return res.status(404).json({ success: false, msg: "Not found" });
+      if (isEmpty(users)) {
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       }
       users = users.map((user) => {
         return {
@@ -605,12 +754,14 @@ router.get("/customers/:id", utils.authMiddleware, async (req, res, next) => {
   ) {
     return res
       .status(401)
-      .json({ success: false, msg: "Not Authorized for this action" });
+      .json({ success: false, msg: errorMessages.accessDenied });
   }
   User.findById(req.params.id)
     .then((user) => {
       if (!user) {
-        return res.status(404).json({ success: false, msg: "Not found" });
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       }
       user = {
         id: user._id,
@@ -623,7 +774,7 @@ router.get("/customers/:id", utils.authMiddleware, async (req, res, next) => {
       return res.status(200).json({ success: true, user });
     })
     .catch((err) => {
-      return res.status(404).json({ success: false, msg: "Not found" });
+      return res.status(404).json({ success: false, msg: err });
     });
 });
 
@@ -643,11 +794,13 @@ router.delete(
     ) {
       return res
         .status(401)
-        .json({ success: false, msg: "Not Authorized for this action" });
+        .json({ success: false, msg: errorMessages.accessDenied });
     }
     await User.findByIdAndDelete(req.params.id, async (err, deleted) => {
       if (err || isEmpty(deleted)) {
-        return res.status(404).json({ success: false, msg: "Not found" });
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       } else {
         await utils.sendMail(
           deleted.email,
@@ -660,4 +813,9 @@ router.delete(
   }
 );
 
+// TODO: Add forgot password
+
+// TODO: Change information
+
+// TODO: Define each admin under which department
 module.exports = router;

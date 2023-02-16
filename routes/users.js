@@ -14,6 +14,13 @@ const {
   userAccountVerified,
 } = require("../EmailTemplates");
 
+// Error messages
+const {
+  createRequirementErrorMessage,
+  createInvalidErrorMessage,
+  createLengthErrorMessage,
+} = require("../lib/utils");
+
 // Keys
 const pathToKey = path.join(__dirname, "..", "id_rsa_priv.pem");
 const pathToPubKey = path.join(__dirname, "..", "id_rsa_pub.pem");
@@ -21,37 +28,54 @@ const PRIV_KEY = fs.readFileSync(pathToKey, "utf8");
 const PUB_KEY = fs.readFileSync(pathToPubKey, "utf8");
 
 // validations
-const {
-  textLength,
-  validatePassword,
-  validatePhonenumber,
-  validateEmail,
-} = require("../validations/validations");
+const { validateRequests } = require(path.join(
+  __dirname,
+  "../components/validation"
+));
 const { isEmpty } = require("../validations/common");
 
 // Constants
-const { CUSTOMER_MANAGEMENT, VERIFIED, ENABLED } = require(path.join(
-  __dirname,
-  "../constants"
-));
+const {
+  CUSTOMER_MANAGEMENT,
+  VERIFIED,
+  ENABLED,
+  errorMessages,
+  successMessages,
+} = require(path.join(__dirname, "../constants"));
 
 // Login an existing user
 router.post("/login", (req, res, next) => {
-  let errors = {};
-  if (textLength(req.body.username, 3, 20, "username") !== null)
-    errors = { ...errors, ...textLength(req.body.username, 3, 20, "username") };
-  if (validatePassword(req.body.password) !== null)
-    errors = { ...errors, ...validatePassword(req.body.password) };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "username",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("username"),
+      },
+      error: createInvalidErrorMessage("username"),
+    },
+    {
+      title: "password",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("password"),
+      },
+      error: createInvalidErrorMessage("password"),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
-  eq.body.username = req.body.username.toString().toLowerCase();
+  req.body.username = req.body.username.toString().toLowerCase();
   User.findOne({ username: req.body.username })
     .then((user) => {
       if (!user) {
         return res
           .status(401)
-          .json({ success: false, msg: "could not find user" });
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       }
 
       const isValid = utils.validPassword(
@@ -71,7 +95,7 @@ router.post("/login", (req, res, next) => {
       } else {
         return res
           .status(401)
-          .json({ success: false, msg: "Wrong username/password" });
+          .json({ success: false, msg: errorMessages.wrongUserPass });
       }
     })
     .catch((err) => {
@@ -81,43 +105,63 @@ router.post("/login", (req, res, next) => {
 
 // Register a new user
 router.post("/register", (req, res, next) => {
-  let errors = {};
-  if (textLength(req.body.username, 3, 20, "username") !== null)
-    errors = { ...errors, ...textLength(req.body.username, 3, 20, "username") };
-  if (validatePassword(req.body.password) !== null)
-    errors = { ...errors, ...validatePassword(req.body.password) };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "username",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("username"),
+      },
+      length: {
+        value: [3, 20],
+        error: createLengthErrorMessage("username", 3, 20),
+      },
+      error: createInvalidErrorMessage("username"),
+    },
+    {
+      title: "password",
+      type: "password",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("password"),
+      },
+      length: {
+        value: [8, 30],
+      },
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
   req.body.username = req.body.username.toString().toLowerCase();
-  User.findOne({ username: req.body.username }).then(
-    (user) => {
-      if (user) {
-        return res
-          .status(409)
-          .json({ success: false, msg: "The username already registered" });
-      }
-
-      const saltHash = utils.genPassword(req.body.password);
-
-      const salt = saltHash.salt;
-      const hash = saltHash.hash;
-
-      const newUser = new User({
-        username: req.body.username,
-        hash: hash,
-        salt: salt,
-      });
-
-      try {
-        newUser.save().then((user) => {
-          return res.status(200).json({ success: true, user: user });
-        });
-      } catch (err) {
-        return res.status(400).json({ success: false, msg: err });
-      }
+  User.findOne({ username: req.body.username }).then((user) => {
+    if (user) {
+      return res
+        .status(409)
+        .json({ success: false, msg: errorMessages.accountExists });
     }
-  );
+
+    const saltHash = utils.genPassword(req.body.password);
+
+    const salt = saltHash.salt;
+    const hash = saltHash.hash;
+
+    const newUser = new User({
+      username: req.body.username,
+      hash: hash,
+      salt: salt,
+    });
+
+    try {
+      newUser.save().then((user) => {
+        return res.status(200).json({ success: true, user: user });
+      });
+    } catch (err) {
+      return res.status(400).json({ success: false, msg: err });
+    }
+  });
 });
 
 // Toggle, disable, enable an account
@@ -131,12 +175,14 @@ router.patch("/:id", utils.authMiddleware, async (req, res, next) => {
       [ENABLED, VERIFIED]
     ))
   ) {
-    return res.status(401).json({ msg: "Not Authorized for this action" });
+    return res.status(401).json({ msg: errorMessages.accessDenied });
   }
   User.findById(req.params.id)
     .then((user) => {
       if (!user) {
-        return res.status(404).json({ success: false, msg: "Not found" });
+        return res
+          .status(404)
+          .json({ success: false, msg: errorMessages.accountDoesNotExist });
       }
       user.enabled = !user.enabled;
       user
@@ -156,23 +202,60 @@ router.patch("/:id", utils.authMiddleware, async (req, res, next) => {
 // compelete account
 router.post("/compelete", utils.authMiddleware, async (req, res, next) => {
   const { firstname, lastname, phonenumber, email } = req.body;
-  let errors = {};
-  if (textLength(firstname, 3, 20, "firstname") !== null)
-    errors = { ...errors, ...textLength(firstname, 3, 20, "firstname") };
-  if (textLength(lastname, 3, 20, "lastname") !== null)
-    errors = { ...errors, ...textLength(lastname, 3, 20, "lastname") };
-  if (validatePhonenumber(phonenumber) !== null)
-    errors = { ...errors, ...validatePhonenumber(phonenumber) };
-  if (validateEmail(email) !== null)
-    errors = { ...errors, ...validateEmail(email) };
-  if (!isEmpty(errors)) {
+  const validationOptions = [
+    {
+      title: "firstname",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("firstname"),
+      },
+      error: createInvalidErrorMessage("firstname"),
+    },
+    {
+      title: "lastname",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("lastname"),
+      },
+      error: createInvalidErrorMessage("firstname"),
+    },
+    {
+      title: "phonenumber",
+      type: "phonenumber",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("phonenumber"),
+      },
+      error: createInvalidErrorMessage("phonenumber"),
+    },
+    {
+      title: "email",
+      type: "email",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("email"),
+      },
+      error: createInvalidErrorMessage("email"),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
+
   User.findById(req.jwt.sub).then(async (user) => {
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, msg: "The user not found" });
+        .json({ success: false, msg: errorMessages.accountDoesNotExist });
+    }
+    if (user.verified) {
+      return res.status(409).json({
+        success: false,
+        msg: errorMessages.accountAlreadyComplete,
+      });
     }
     user.firstname = firstname.toLowerCase();
     user.lastname = lastname.toLowerCase();
@@ -191,14 +274,16 @@ router.post("/compelete", utils.authMiddleware, async (req, res, next) => {
             algorithm: "RS256",
           }
         );
-        await utils.sendMail(
+        EmailHandler.sendEmail(
+          "Users",
           user.email,
           "Verify your account",
+          "Verification",
           userVerificationLink(user, signedToken)
         );
         return res.status(200).json({
           success: true,
-          msg: "Your account is complete now. We just sent you an email with verification url.",
+          msg: successMessages.accountCompleted,
         });
       })
       .catch((err) => {
@@ -230,13 +315,13 @@ router.get("/activate/:token", async (req, res, next) => {
           if (!user) {
             return res.status(404).json({
               success: false,
-              msg: "There is no account match with this verification code",
+              msg: errorMessages.other,
             });
           }
           if (user.verified) {
             return res.status(400).json({
               success: false,
-              msg: "The account is already verified",
+              msg: errorMessages.accountAlreadyVerified,
             });
           }
 
@@ -249,7 +334,7 @@ router.get("/activate/:token", async (req, res, next) => {
             );
             return res.status(200).json({
               success: true,
-              msg: "Your account verified successfully",
+              msg: successMessages.verifiedSuccessfully,
             });
           });
         })
@@ -257,14 +342,10 @@ router.get("/activate/:token", async (req, res, next) => {
           return res.status(400).json({ success: false, msg: err });
         });
     } else {
-      return res
-        .status(400)
-        .json({ success: false, msg: "something went wrong" });
+      return res.status(400).json({ success: false, msg: errorMessages.other });
     }
   } else {
-    return res
-      .status(400)
-      .json({ success: false, msg: "something went wrong" });
+    return res.status(400).json({ success: false, msg: errorMessages.other });
   }
 });
 

@@ -1,41 +1,78 @@
 const router = require("express").Router();
 const path = require("path");
 
-// helper functions
-const utils = require(path.join(__dirname, "../lib/utils"));
+// Error messages
+const {
+  createRequirementErrorMessage,
+  createInvalidErrorMessage,
+  createLengthErrorMessage,
+} = require("../lib/utils");
 
-const { contactMessage } = require("../EmailTemplates");
+// Import Email template
+const { contactMessage } = require(path.join(__dirname, "../EmailTemplates"));
 
 // Validations
-const {
-  textLength,
-  validatePhonenumber,
-  validateEmail,
-} = require("../validations/validations");
-const { isEmpty } = require("../validations/common");
+const { validateRequests } = require(path.join(
+  __dirname,
+  "../components/validation"
+));
 
 // Send email to support email
 router.post("/", async (req, res, next) => {
   const { detail, phonenumber, email, name } = req.body;
-  let errors = {};
-  if (textLength(detail, 8, 300) !== null) {
-    errors = { ...errors, ...textLength(detail, 8, 300, "detail") };
-  }
-  if (validatePhonenumber(phonenumber) !== null) {
-    errors = { ...errors, ...validatePhonenumber(phonenumber) };
-  }
-  if (validateEmail(email) !== null) {
-    errors = { ...errors, ...validateEmail(email) };
-  }
-  if (isEmpty(name)) {
-    errors = { ...errors, name: "name is required" };
-  }
-  if (!isEmpty(errors)) {
+
+  const validationOptions = [
+    {
+      title: "name",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("name"),
+      },
+      error: createInvalidErrorMessage("name"),
+    },
+    {
+      title: "phonenumber",
+      type: "phonenumber",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("phone number"),
+      },
+      error: createInvalidErrorMessage("phone number"),
+    },
+    {
+      title: "email",
+      type: "email",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("email"),
+      },
+      error: createInvalidErrorMessage("email"),
+    },
+    {
+      title: "detail",
+      type: "text",
+      required: {
+        value: true,
+        error: createRequirementErrorMessage("message"),
+      },
+      length: {
+        value: [8, 300],
+        error: createLengthErrorMessage("message", 8, 300),
+      },
+      error: createLengthErrorMessage("message", 8, 300),
+    },
+  ];
+  let { isValid, errors } = validateRequests(req.body, validationOptions);
+  if (!isValid) {
     return res.status(400).json({ success: false, errors });
   }
-  await utils.sendMail(
-    email,
-    "Contact",
+
+  EmailHandler.sendEmail(
+    "contact us",
+    EmailHandler.getFrom(),
+    "contact",
+    detail,
     contactMessage({ name, email, phonenumber, detail })
   );
   return res
