@@ -17,15 +17,15 @@ services:
     ports:
       - 80:3000
     environment:
-      NODE_ENV: production
-      DB_STRING: mongodb://mongo_db:27017/panel
-      DB_STRING_PROD: mongodb://mongo_db:27017/panel
-      db_name: my_db
-      PORT: 3000
-      SERVER_URL: http://localhost:5000/
-      EMAIL_SERVICE: hotmail
-      EMAIL_USERNAME: contact@vima.team
-      EMAIL_PASSWORD: 2022Vim@a
+      NODE_ENV: ${NODE_ENV}
+      DB_STRING: ${DB_STRING}
+      DB_STRING_PROD: ${DB_STRING_PROD}
+      DB_NAME: ${DB_NAME}
+      PORT: ${PORT}
+      SERVER_URL: ${SERVER_URL}
+      EMAIL_SERVICE: ${EMAIL_SERVICE}
+      EMAIL_USERNAME: ${EMAIL_USERNAME}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
     depends_on:
       - mongo_db
 
