@@ -26,7 +26,7 @@ require(path.join(__dirname, "./models/revenue"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(cors({ origin: ["https://www.vima.team", "https://vima.team"] }));
+app.use(cors({ origin: "*" }));
 
 // Imports all of the routes from ./routes/index.js
 app.use(require(path.join(__dirname, "./routes")));
